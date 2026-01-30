@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Store 截图生成器</title>
+    <style>
+        :root {
+            --primary-color: #007aff;
+            --bg-color: #f5f5f7;
+            --card-bg: #ffffff;
+            --text-color: #1d1d1f;
+            --border-color: #d2d2d7;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: var(--card-bg);
+            border-radius: 18px;
+            padding: 40px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+
+        .drop-zone {
+            width: 100%;
+            height: 200px;
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background-color: #fafafa;
+            margin-bottom: 30px;
+        }
+
+        .drop-zone.drag-over {
+            border-color: var(--primary-color);
+            background-color: rgba(0, 122, 255, 0.05);
+        }
+
+        .drop-zone p {
+            margin: 10px 0 0;
+            color: #86868b;
+        }
+
+        .drop-zone svg {
+            width: 48px;
+            height: 48px;
+            fill: #86868b;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 20px;
+            margin-bottom: 30px;
+            align-items: end;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #86868b;
+        }
+
+        select {
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            font-size: 16px;
+            background-color: white;
+            outline: none;
+            cursor: pointer;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #0062cc;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .preview-area {
+            margin-top: 30px;
+            border-top: 1px solid var(--border-color);
+            padding-top: 30px;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .preview-area.active {
+            display: flex;
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .file-info {
+            font-size: 14px;
+            color: #86868b;
+            margin-bottom: 10px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>App Store 截图裁剪工具</h1>
+        
+        <div class="drop-zone" id="dropZone">
+            <svg viewBox="0 0 24 24">
+                <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+            </svg>
+            <p>拖拽图片到这里，或点击上传</p>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;">
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="sizeSelect">目标尺寸</label>
+                <select id="sizeSelect">
+                    <option value="1242,2688">6.5英寸 - 竖屏 (1242 × 2688)</option>
+                    <option value="2688,1242">6.5英寸 - 横屏 (2688 × 1242)</option>
+                    <option value="1284,2778">6.7英寸 - 竖屏 (1284 × 2778)</option>
+                    <option value="2778,1284">6.7英寸 - 横屏 (2778 × 1284)</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="modeSelect">处理模式</label>
+                <select id="modeSelect">
+                    <option value="cover">裁剪填充 (Scale to Fill)</option>
+                    <option value="contain">背景模糊 (Fit with Blur)</option>
+                </select>
+            </div>
+            <button id="downloadBtn" disabled>下载处理后的图片</button>
+        </div>
+
+        <div class="preview-area" id="previewArea">
+            <div class="file-info" id="fileInfo"></div>
+            <canvas id="previewCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const sizeSelect = document.getElementById('sizeSelect');
+        const modeSelect = document.getElementById('modeSelect');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const previewArea = document.getElementById('previewArea');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const fileInfo = document.getElementById('fileInfo');
+        const ctx = previewCanvas.getContext('2d');
+
+        let currentImage = null;
+        let originalFileName = '';
+
+        // Drag and Drop events
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        sizeSelect.addEventListener('change', () => {
+            if (currentImage) {
+                processImage();
+            }
+        });
+
+        modeSelect.addEventListener('change', () => {
+            if (currentImage) {
+                processImage();
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                alert('请上传图片文件');
+                return;
+            }
+
+            originalFileName = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    currentImage = img;
+                    processImage();
+                    previewArea.classList.add('active');
+                    downloadBtn.disabled = false;
+                };
+                img.src = e.target.result;
+            };
+            
+            reader.readAsDataURL(file);
+        }
+
+        function processImage() {
+            if (!currentImage) return;
+
+            const [targetWidth, targetHeight] = sizeSelect.value.split(',').map(Number);
+            
+            // Set canvas dimensions to target
+            previewCanvas.width = targetWidth;
+            previewCanvas.height = targetHeight;
+
+            const srcWidth = currentImage.width;
+            const srcHeight = currentImage.height;
+
+            // Clear canvas and set black background to prevent alpha channel issues
+            ctx.clearRect(0, 0, targetWidth, targetHeight);
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, targetWidth, targetHeight);
+
+            const mode = modeSelect.value;
+
+            if (mode === 'cover') {
+                // Calculate scale to cover
+                const scale = Math.max(targetWidth / srcWidth, targetHeight / srcHeight);
+                const renderWidth = srcWidth * scale;
+                const renderHeight = srcHeight * scale;
+                const offsetX = (renderWidth - targetWidth) / 2;
+                const offsetY = (renderHeight - targetHeight) / 2;
+                
+                ctx.drawImage(currentImage, -offsetX, -offsetY, renderWidth, renderHeight);
+                fileInfo.textContent = `模式: 裁剪填充 | 原图: ${srcWidth}x${srcHeight} | 目标: ${targetWidth}x${targetHeight}`;
+            } else {
+                // Contain with Blur Background
+                // 1. Draw blurred background (scale to cover)
+                const bgScale = Math.max(targetWidth / srcWidth, targetHeight / srcHeight);
+                const bgWidth = srcWidth * bgScale;
+                const bgHeight = srcHeight * bgScale;
+                const bgOffsetX = (bgWidth - targetWidth) / 2;
+                const bgOffsetY = (bgHeight - targetHeight) / 2;
+
+                // Save context for filter application
+                ctx.save();
+                // Stronger blur and darker background for better contrast
+                ctx.filter = 'blur(40px) brightness(0.6)';
+                // Draw significantly larger to avoid blur edge artifacts
+                ctx.drawImage(currentImage, -bgOffsetX - 50, -bgOffsetY - 50, bgWidth + 100, bgHeight + 100);
+                ctx.restore();
+
+                // 2. Draw main image (scale to fit)
+                const scale = Math.min(targetWidth / srcWidth, targetHeight / srcHeight);
+                const renderWidth = srcWidth * scale;
+                const renderHeight = srcHeight * scale;
+                const offsetX = (targetWidth - renderWidth) / 2;
+                const offsetY = (targetHeight - renderHeight) / 2;
+
+                // Add shadow
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                ctx.shadowBlur = 40;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 20;
+
+                ctx.drawImage(currentImage, offsetX, offsetY, renderWidth, renderHeight);
+                
+                // Reset shadow
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                fileInfo.textContent = `模式: 背景模糊 | 原图: ${srcWidth}x${srcHeight} | 目标: ${targetWidth}x${targetHeight}`;
+            }
+        }
+
+        downloadBtn.addEventListener('click', () => {
+            if (!currentImage) return;
+            
+            const [targetWidth, targetHeight] = sizeSelect.value.split(',').map(Number);
+            // Export as JPEG to ensure NO alpha channel
+            const dataUrl = previewCanvas.toDataURL('image/jpeg', 0.95);
+            
+            const link = document.createElement('a');
+            link.download = `${originalFileName}_${targetWidth}x${targetHeight}.jpg`;
+            link.href = dataUrl;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+    </script>
+</body>
+</html>
